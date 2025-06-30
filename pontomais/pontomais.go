@@ -16,6 +16,22 @@ type Status struct {
 	Name string `json:"name"`
 }
 
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginResponse struct {
+	Success  string `json:"success"`
+	Token    string `json:"token"`
+	ClientID string `json:"client_id"`
+	Data     struct {
+		Login        string `json:"login"`
+		SignInCount  int    `json:"sign_in_count"`
+		LastSignInIP string `json:"last_sign_in_ip"`
+		LastSignInAt int    `json:"last_sign_in_at"`
+	} `json:"data"`
+}
 type WorkDay struct {
 	ID            int64   `json:"id"`
 	Date          string  `json:"date"`
@@ -68,6 +84,60 @@ type PontoMaisConfig struct {
 	Uid         string
 	Client      string
 	Uuid        string
+	Email       string
+	Password    string
+}
+
+// Função para obter o token de acesso
+func GetAccessToken(config PontoMaisConfig) (LoginResponse, error) {
+	// URL da API
+	url := "https://api.pontomais.com.br/api/auth/sign_in"
+	var response LoginResponse
+
+	// Criando um novo request
+	loginRequest := LoginRequest{
+		Email:    config.Email,
+		Password: config.Password,
+	}
+
+	jsonData, err := json.Marshal(loginRequest)
+	if err != nil {
+		return response, fmt.Errorf("erro ao converter request para JSON: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return response, fmt.Errorf("erro ao criar a requisição: %v", err)
+	}
+
+	// Adicionando headers
+	req.Header.Add("Accept", "application/json, text/plain, */*")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0")
+	req.Header.Add("Api-Version", "2")
+
+	// Criando um cliente HTTP
+	client := &http.Client{}
+
+	// Fazendo a requisição
+	resp, err := client.Do(req)
+	if err != nil {
+		return response, fmt.Errorf("erro ao fazer a requisição: %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	// Lendo o corpo da resposta
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return response, fmt.Errorf("erro ao ler o corpo da resposta: %v", err)
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return response, fmt.Errorf("erro ao parsear o JSON: %v", err)
+	}
+
+	return response, nil
 }
 
 // Função para obter os dias de trabalho
@@ -193,7 +263,3 @@ func AjustarPonto(config PontoMaisConfig, request AjustePontoRequest) error {
 
 	return nil
 }
-
-// https://app2.pontomais.com.br/meu-ponto/ajuste/29-04-2025;id=1991631201
-
-// https://api.pontomais.com.br/api/time_cards/proposals

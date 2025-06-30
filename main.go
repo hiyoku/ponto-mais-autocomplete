@@ -13,15 +13,17 @@ func main() {
 	accessToken := flag.String("access-token", "", "Access Token do PontoMais")
 	uid := flag.String("uid", "", "UID do usuário")
 	client := flag.String("client", "", "Client ID")
+	email := flag.String("email", "", "Email do usuário")
+	password := flag.String("password", "", "Senha do usuário")
 	flag.Parse()
 
 	// Verificando se os parâmetros obrigatórios foram fornecidos
-	if *accessToken == "" || *uid == "" || *client == "" {
+	if !((*accessToken != "" && *uid != "" && *client != "") || (*email != "" && *password != "")) {
 		fmt.Println("Uso: go run main.go --access-token=SEU_ACCESS_TOKEN --uid=SEU_UID --client=SEU_CLIENT")
+		fmt.Println("   ou: go run main.go --email=SEU_EMAIL --password=SEU_PASSWORD")
 		fmt.Println("Parâmetros obrigatórios:")
-		fmt.Println("  --access-token: Access Token do PontoMais")
-		fmt.Println("  --uid: UID do usuário")
-		fmt.Println("  --client: Client ID")
+		fmt.Println("  --access-token, --uid, --client  (ou)")
+		fmt.Println("  --email, --password")
 		return
 	}
 
@@ -32,7 +34,22 @@ func main() {
 		Uid:         *uid,
 		Client:      *client,
 		Uuid:        "",
+		Email:       *email,
+		Password:    *password,
 	}
+
+	if config.AccessToken == "" {
+		loginResponse, err := pontomais.GetAccessToken(config)
+		if err != nil {
+			fmt.Printf("Erro ao obter token de acesso: %v\n", err)
+			return
+		}
+		config.AccessToken = loginResponse.Token
+		config.Token = loginResponse.Token
+		config.Uid = loginResponse.Data.Login
+		config.Client = loginResponse.ClientID
+	}
+
 	// Lista para armazenar todos os WorkDays
 	var todosWorkDays []pontomais.WorkDay
 
