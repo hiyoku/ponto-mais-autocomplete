@@ -28,3 +28,7 @@ go.work.sum
 *.zip
 *.7z
 *.rar
+
+# Ignoring AI folders
+.codex
+.claude
