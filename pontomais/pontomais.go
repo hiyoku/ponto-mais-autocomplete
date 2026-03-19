@@ -3,12 +3,19 @@ package pontomais
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
+
+const apiBaseURL = "https://api.pontomais.com.br"
+
+var httpClient = &http.Client{}
+var ErrInvalidCredentials = errors.New("credenciais inválidas")
 
 // Estruturas para parsear o JSON
 type Status struct {
@@ -90,8 +97,12 @@ type PontoMaisConfig struct {
 
 // Função para obter o token de acesso
 func GetAccessToken(config PontoMaisConfig) (LoginResponse, error) {
+	return getAccessTokenWithBaseURL(config, apiBaseURL)
+}
+
+func getAccessTokenWithBaseURL(config PontoMaisConfig, baseURL string) (LoginResponse, error) {
 	// URL da API
-	url := "https://api.pontomais.com.br/api/auth/sign_in"
+	url := fmt.Sprintf("%s/api/auth/sign_in", baseURL)
 	var response LoginResponse
 
 	// Criando um novo request
@@ -117,10 +128,8 @@ func GetAccessToken(config PontoMaisConfig) (LoginResponse, error) {
 	req.Header.Add("Api-Version", "2")
 
 	// Criando um cliente HTTP
-	client := &http.Client{}
-
 	// Fazendo a requisição
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return response, fmt.Errorf("erro ao fazer a requisição: %v", err)
 	}
@@ -133,8 +142,24 @@ func GetAccessToken(config PontoMaisConfig) (LoginResponse, error) {
 		return response, fmt.Errorf("erro ao ler o corpo da resposta: %v", err)
 	}
 
+	bodyText := strings.TrimSpace(string(body))
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if bodyText == "" {
+			return response, ErrInvalidCredentials
+		}
+		return response, fmt.Errorf("%w: %s", ErrInvalidCredentials, bodyText)
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return response, fmt.Errorf("erro na autenticação: %s - %s", resp.Status, bodyText)
+	}
+
 	if err := json.Unmarshal(body, &response); err != nil {
 		return response, fmt.Errorf("erro ao parsear o JSON: %v", err)
+	}
+
+	if response.Token == "" || response.ClientID == "" || response.Data.Login == "" {
+		return response, fmt.Errorf("%w: resposta de autenticação sem token válido", ErrInvalidCredentials)
 	}
 
 	return response, nil
@@ -142,8 +167,12 @@ func GetAccessToken(config PontoMaisConfig) (LoginResponse, error) {
 
 // Função para obter os dias de trabalho
 func GetWorkDays(config PontoMaisConfig, dataInicio, dataFim time.Time) ([]WorkDay, error) {
+	return getWorkDaysWithBaseURL(config, dataInicio, dataFim, apiBaseURL)
+}
+
+func getWorkDaysWithBaseURL(config PontoMaisConfig, dataInicio, dataFim time.Time, baseURL string) ([]WorkDay, error) {
 	// Criando a URL base
-	baseURL := "https://api.pontomais.com.br/api/time_card_control/current/work_days"
+	workDaysURL := fmt.Sprintf("%s/api/time_card_control/current/work_days", baseURL)
 
 	// Criando os parâmetros da URL
 	params := url.Values{}
@@ -153,7 +182,7 @@ func GetWorkDays(config PontoMaisConfig, dataInicio, dataFim time.Time) ([]WorkD
 	params.Add("sort_property", "date")
 
 	// Construindo a URL completa com os parâmetros
-	url_ajuste := fmt.Sprintf("%s?%s", baseURL, params.Encode())
+	url_ajuste := fmt.Sprintf("%s?%s", workDaysURL, params.Encode())
 
 	// Criando um novo request
 	req, err := http.NewRequest("GET", url_ajuste, nil)
@@ -179,10 +208,8 @@ func GetWorkDays(config PontoMaisConfig, dataInicio, dataFim time.Time) ([]WorkD
 	req.Header.Add("sec-fetch-site", "same-site")
 
 	// Criando um cliente HTTP
-	client := &http.Client{}
-
 	// Fazendo a requisição
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao fazer a requisição: %v", err)
 	}
@@ -205,8 +232,12 @@ func GetWorkDays(config PontoMaisConfig, dataInicio, dataFim time.Time) ([]WorkD
 
 // Função para fazer o ajuste de ponto
 func AjustarPonto(config PontoMaisConfig, request AjustePontoRequest) error {
+	return ajustarPontoWithBaseURL(config, request, apiBaseURL)
+}
+
+func ajustarPontoWithBaseURL(config PontoMaisConfig, request AjustePontoRequest, baseURL string) error {
 	// URL da API
-	url := "https://api.pontomais.com.br/api/time_cards/proposals"
+	url := fmt.Sprintf("%s/api/time_cards/proposals", baseURL)
 
 	// Convertendo o request para JSON
 	jsonData, err := json.Marshal(request)
@@ -241,10 +272,8 @@ func AjustarPonto(config PontoMaisConfig, request AjustePontoRequest) error {
 	req.Header.Add("sec-fetch-site", "same-site")
 
 	// Criando um cliente HTTP
-	client := &http.Client{}
-
 	// Fazendo a requisição
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("erro ao fazer a requisição: %v", err)
 	}

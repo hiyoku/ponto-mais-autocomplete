@@ -32,3 +32,4 @@ go.work.sum
 # Ignoring AI folders
 .codex
 .claude
+.hai
